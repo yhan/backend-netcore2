@@ -31,18 +31,36 @@ namespace quiz_backend.Controllers
             this.signInManager = signInManager;
         }
 
+        [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] Credentials credentials)
+        {
+            var signInResult = await signInManager.PasswordSignInAsync(credentials.Email, credentials.Password, false, false);
+            if (!signInResult.Succeeded)
+            {
+                return BadRequest("Sign in failed");
+            }
+
+            var user = await userManager.FindByEmailAsync(credentials.Email);
+            return Ok(GenerateToken(user));
+        }
+
         [HttpPost]
         public async Task<IActionResult> Register([FromBody] Credentials credentials)
         {
             var user = new IdentityUser { UserName = credentials.Email, Email = credentials.Email };
 
-            var result = await userManager.CreateAsync(user, credentials.Password);
+            var identityResult = await userManager.CreateAsync(user: user, password: credentials.Password);
 
-            if (!result.Succeeded)
-                return BadRequest(result.Errors);
+            if (!identityResult.Succeeded)
+                return BadRequest(identityResult.Errors);
 
             await signInManager.SignInAsync(user, isPersistent: false);
 
+            return Ok(GenerateToken(user));
+        }
+
+        private static string GenerateToken(IdentityUser user)
+        {
             var claims = new Claim[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id)
@@ -52,7 +70,7 @@ namespace quiz_backend.Controllers
             var signingCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
 
             var jwt = new JwtSecurityToken(signingCredentials: signingCredentials, claims: claims);
-            return Ok(new JwtSecurityTokenHandler().WriteToken(jwt));
+            return  new JwtSecurityTokenHandler().WriteToken(jwt);
         }
     }
 }
